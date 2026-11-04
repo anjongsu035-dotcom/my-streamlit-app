@@ -11,6 +11,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import streamlit as st
 from openai import OpenAI
+import plotly.express as px
 
 
 # ----------------------------------------------------------------------
@@ -115,6 +116,45 @@ def prepare_competitors(raw):
     )
     return df
 
+
+# 가독성을 높인 가로 막대그래프
+def show_horizontal_bar(df, name_col, value_col, x_title, percent=False):
+    chart = df[[name_col, value_col]].dropna().copy()
+
+    if chart.empty:
+        return
+
+    # 그래프에서만 '(가상)' 표시 제거
+    chart["표시이름"] = chart[name_col].astype(str).str.replace(
+        r"\s*\(가상[^)]*\)", "", regex=True
+    )
+
+    chart = chart.sort_values(value_col, ascending=True)
+
+    fig = px.bar(
+        chart,
+        x=value_col,
+        y="표시이름",
+        orientation="h",
+        text=value_col
+    )
+
+    fig.update_traces(
+        texttemplate="%{text:.2f}%" if percent else "%{text:,.0f}",
+        textposition="outside",
+        cliponaxis=False
+    )
+
+    fig.update_layout(
+        height=max(360, len(chart) * 45 + 120),
+        xaxis_title=x_title,
+        yaxis_title=None,
+        yaxis=dict(automargin=True),
+        margin=dict(l=20, r=100, t=20, b=30),
+        showlegend=False
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
 
 def competitor_summary(df):
     # 전체 게시물 수와 '반응률 계산 가능' 게시물 수를 분리합니다.
@@ -262,12 +302,15 @@ if page == "통합 대시보드":
             overall = competitor_summary(comp)
             available = overall.dropna(subset=["total_views"])
             if not available.empty:
-                st.bar_chart(available.set_index("brand")["total_views"])
+                show_horizontal_bar(available, "brand", "total_views", "총 조회수")
             st.caption("반응률은 좋아요+댓글+공유+저장이 모두 수집된 게시물만 계산합니다.")
         if infl is not None:
             st.subheader("후보자별 평균 조회수")
             if infl["avg_views"].notna().any():
-                st.bar_chart(infl.dropna(subset=["avg_views"]).set_index("name")["avg_views"])
+                show_horizontal_bar(
+    infl.dropna(subset=["avg_views"]),
+    "name", "avg_views", "평균 조회수"
+)
 
 
 # ----------------------------------------------------------------------
@@ -288,11 +331,14 @@ elif page == "경쟁사 마케팅 분석":
             st.subheader("브랜드별 조회수 비교")
             viewable = summary.dropna(subset=["total_views"])
             if not viewable.empty:
-                st.bar_chart(viewable.set_index("brand")["total_views"])
+                show_horizontal_bar(viewable, "brand", "total_views", "총 조회수")
             st.subheader("브랜드별 조회 대비 반응률 (%)")
             measurable = summary.dropna(subset=["view_reaction_rate_pct"])
             if not measurable.empty:
-                st.bar_chart(measurable.set_index("brand")["view_reaction_rate_pct"])
+                show_horizontal_bar(
+    measurable, "brand", "view_reaction_rate_pct",
+    "조회 대비 반응률 (%)", percent=True
+)
             else:
                 st.info("조회수와 네 종류의 반응 지표가 모두 있는 게시물이 필요합니다.")
             st.caption("조회 대비 반응률 = (좋아요+댓글+공유+저장) / 조회수 × 100. 플랫폼별 집계 방식이 다를 수 있습니다.")
