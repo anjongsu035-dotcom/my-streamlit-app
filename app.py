@@ -1965,6 +1965,23 @@ def render_sidebar(ctx):
             if st.button(PAGES["calendar"], key="nav_calendar", icon=":material/calendar_month:", type="primary" if page == "calendar" else "secondary"):
                 go("calendar")
 
+        # TEAM_CSV_EXTENSION_START — 추가 메뉴 (원본 기능 수정 없음)
+        if is_owner:
+            with st.expander("마케팅 · CSV 분석 (추가 기능)", expanded=False):
+                extra_pages = [
+                    ("CSV 시각화 보고서", "csv_report"),
+                    ("마케팅 통합 대시보드", "m_dashboard"),
+                    ("경쟁사 마케팅 분석", "m_competitor"),
+                    ("SNS 콘텐츠 작성", "m_sns"),
+                    ("인플루언서 조사", "m_influencer"),
+                    ("마케팅 AI 비서", "m_assistant"),
+                    ("마케팅 업무 기록", "m_history"),
+                ]
+                for label, target in extra_pages:
+                    if st.button(label, key=f"extra_nav_{target}", type="primary" if page == target else "secondary"):
+                        go(target)
+        # TEAM_CSV_EXTENSION_END
+
         # 데이터 초기화 (확인 후 실행)
         st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
         if not st.session_state.confirm_reset:
@@ -2442,7 +2459,15 @@ def main():
     page = st.session_state.page
     if not ctx["is_owner"] and page not in ("requests", "calendar"):
         page = st.session_state.page = "requests"
-    if page == "summary":
+    # TEAM_CSV_EXTENSION_ROUTE_START — 추가 기능 라우팅
+    if page == "csv_report":
+        from csv_report_addon import render_csv_report
+        render_csv_report()
+    elif page in ("m_dashboard", "m_competitor", "m_sns", "m_influencer", "m_assistant", "m_history"):
+        from marketing_addon import render_marketing_page
+        render_marketing_page(page)
+    # TEAM_CSV_EXTENSION_ROUTE_END
+    elif page == "summary":
         render_summary(ctx)
     elif page == "tasks":
         render_tasks(ctx)
