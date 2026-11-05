@@ -28,6 +28,23 @@ def init_custom_tasks():
         st.session_state.custom_task_results = {}
 
 
+def remove_custom_task(task_id):
+    """사용자가 생성한 기능만 세션에서 삭제한다. 기본 메뉴/팀원 기능은 건드리지 않는다."""
+    init_custom_tasks()
+    tasks = st.session_state.custom_task_templates
+    filtered = [task for task in tasks if task.get("id") != task_id]
+    if len(filtered) == len(tasks):
+        return False
+    st.session_state.custom_task_templates = filtered
+    st.session_state.custom_task_results.pop(task_id, None)
+    # 현재 보고 있던 기능을 삭제했다면 빈 페이지로 남지 않도록 이동
+    if st.session_state.get("custom_task_active_id") == task_id:
+        st.session_state.custom_task_active_id = None
+        if st.session_state.get("page") == "custom_run":
+            st.session_state.page = "custom_create"
+    return True
+
+
 def _client():
     key = os.environ.get("OPENAI_API_KEY", "")
     if not key:
@@ -291,10 +308,6 @@ def render_custom_task_runner():
 
     with st.expander("기능 관리"):
         if st.button("이 기능 삭제", key=f"remove_{task_id}"):
-            st.session_state.custom_task_templates = [
-                x for x in st.session_state.custom_task_templates if x["id"] != task_id
-            ]
-            st.session_state.custom_task_results.pop(task_id, None)
-            st.session_state.custom_task_active_id = None
-            st.session_state.page = "custom_create"
+            if remove_custom_task(task_id):
+                st.toast("업무 기능을 삭제했습니다.")
             st.rerun()

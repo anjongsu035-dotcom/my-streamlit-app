@@ -1981,9 +1981,28 @@ def render_sidebar(ctx):
                 for label, target in extra_pages:
                     if st.button(label, key=f"extra_nav_{target}", type="primary" if page == target else "secondary", use_container_width=True):
                         go(target)
-                for item in st.session_state.custom_task_templates:
-                    if st.button("📌 " + item["title"], key="custom_nav_" + item["id"], type="primary" if page == "custom_run" and st.session_state.get("custom_task_active_id") == item["id"] else "secondary", use_container_width=True):
-                        go("custom_run", custom_task_active_id=item["id"])
+                # LLM으로 추가한 메뉴만: 핀 제거 + 각 항목 오른쪽 삭제 버튼
+                for item in list(st.session_state.custom_task_templates):
+                    menu_col, delete_col = st.columns([5, 1], gap="small")
+                    with menu_col:
+                        if st.button(
+                            item["title"],
+                            key="custom_nav_" + item["id"],
+                            type="primary" if page == "custom_run" and st.session_state.get("custom_task_active_id") == item["id"] else "secondary",
+                            use_container_width=True,
+                        ):
+                            go("custom_run", custom_task_active_id=item["id"])
+                    with delete_col:
+                        if st.button(
+                            "×",
+                            key="custom_delete_" + item["id"],
+                            help=f"{item['title']} 기능 삭제",
+                            use_container_width=True,
+                        ):
+                            from custom_task_addon import remove_custom_task
+                            if remove_custom_task(item["id"]):
+                                st.toast(f"{item['title']} 기능을 삭제했습니다.")
+                            st.rerun()
                 st.divider()
                 if st.button("＋ 추가하기", key="custom_nav_create", type="primary", use_container_width=True):
                     go("custom_create")
