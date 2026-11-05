@@ -187,8 +187,6 @@ def render_marketing_page(page):
         st.session_state.marketing_history = []
     if "sns_draft" not in st.session_state:
         st.session_state.sns_draft = ""
-    if "assistant_answer" not in st.session_state:
-        st.session_state.assistant_answer = ""
     if "competitor_ai" not in st.session_state:
         st.session_state.competitor_ai = ""
     if "influencer_ai" not in st.session_state:
@@ -382,59 +380,7 @@ def render_marketing_page(page):
 
 
     # ----------------------------------------------------------------------
-    # 7. AI 비서: 텍스트 / 음성 지시
-    # ----------------------------------------------------------------------
-    elif page == "m_assistant":
-        st.write("기존 음성 인식 기능을 유지하면서 텍스트로도 지시할 수 있습니다.")
-        with st.form("assistant_form"):
-            instruction = st.text_area("업무 지시", placeholder="예: 업로드한 경쟁사 데이터를 요약하고 다음 주 홍보 방향을 제안해줘")
-            audio = st.audio_input("또는 음성으로 지시")
-            txt_file = st.file_uploader("참고용 TXT 파일(선택)", type="txt", key="assistant_txt")
-            execute = st.form_submit_button("업무 실행", type="primary")
-        if execute:
-            instruction_parts = []
-            if instruction.strip():
-                instruction_parts.append(instruction.strip())
-            if audio is not None:
-                client = api_client()
-                if client is not None:
-                    try:
-                        transcript = client.audio.transcriptions.create(
-                            model="whisper-1",
-                            file=("audio.wav", audio.getvalue(), "audio/wav"),
-                        )
-                        st.info("음성 인식 결과: " + transcript.text)
-                        instruction_parts.append(transcript.text)
-                    except Exception:
-                        st.error("음성 인식에 실패했습니다. 다시 녹음하거나 텍스트로 입력하세요.")
-            if not instruction_parts:
-                st.warning("텍스트 지시 또는 음성 녹음이 필요합니다.")
-            else:
-                instruction_all = "\n".join(instruction_parts)
-                if txt_file is not None:
-                    try:
-                        attachment = txt_file.getvalue().decode("utf-8-sig")
-                        instruction_all += "\n\n[첨부 참고 자료]\n" + attachment[:12000]
-                        if len(attachment) > 12000:
-                            st.warning("참고 TXT는 처음 12,000자만 전달합니다.")
-                    except UnicodeDecodeError:
-                        st.warning("TXT 파일을 UTF-8로 저장해주세요.")
-                if comp is not None:
-                    instruction_all += "\n\n[경쟁사 집계]\n" + competitor_summary(comp).round(2).to_csv(index=False)
-                if infl is not None:
-                    instruction_all += "\n\n[인플루언서 후보]\n" + infl.round(2).head(30).to_csv(index=False)
-                result = ai_request(instruction_all)
-                if result is not None:
-                    st.session_state.assistant_answer = result
-                    remember("AI 비서 업무", result)
-        if st.session_state.assistant_answer:
-            st.subheader("에이블의 답변")
-            st.markdown(st.session_state.assistant_answer)
-            show_download(st.session_state.assistant_answer, "assistant_answer.txt")
-
-
-    # ----------------------------------------------------------------------
-    # 8. 업무 기록
+    # 7. 업무 기록
     # ----------------------------------------------------------------------
     elif page == "m_history":
         st.write("현재 브라우저 세션에서 생성된 결과입니다. 장기 저장을 하려면 DB가 추가로 필요합니다.")
