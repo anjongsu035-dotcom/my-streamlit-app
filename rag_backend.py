@@ -1,6 +1,6 @@
-"""원본 ipynb 기반 RAG 어댑터.
-원본 format_docs / rag_pipeline 함수는 내용 변경 없이 복사했습니다.
-추가 함수는 Streamlit 연결과 백서 원문 조회 용도입니다.
+"""원본 DX ipynb의 RAG 모델·청킹·프롬프트·함수명을 유지한 연결 어댑터.
+웹 업로드로도 사용할 수 있도록 API 키와 Chroma 폴더를 선택적 인자로 추가했습니다.
+기존 rag_pipeline(filepath) 호출은 그대로 동작합니다.
 """
 
 # 경고 메세지 감추기
@@ -34,7 +34,7 @@ def format_docs(docs):
     return "\n\n".join(d.page_content for d in docs)
 
 # RAG 파이프라인 함수
-def rag_pipeline(filepath):
+def rag_pipeline(filepath, *, vector_directory="chroma_db", api_key=None):
 
     # PDF 파일 읽기
     loader = PyMuPDF4LLMLoader(filepath)
@@ -53,14 +53,14 @@ def rag_pipeline(filepath):
 
 
     # Embedding 모델
-    embedding = OpenAIEmbeddings(model="text-embedding-3-small")
+    embedding = OpenAIEmbeddings(model="text-embedding-3-small", api_key=api_key)
 
 
     # 벡터저장소 만들기
     vectorstore = Chroma(
     collection_name="ai_ethics",
     embedding_function=embedding,
-    persist_directory="chroma_db"
+    persist_directory=vector_directory
     )
 
 
@@ -76,7 +76,7 @@ def rag_pipeline(filepath):
 
 
     # LLM 선언
-    llm = ChatOpenAI(model='gpt-4o-mini',temperature=0)
+    llm = ChatOpenAI(model='gpt-4o-mini', temperature=0, api_key=api_key)
 
 
     # 프롬프트 구성
@@ -184,16 +184,16 @@ def initialize_rag():
     return rag_chain
 
 
-def retrieve_whitepaper_chunks(question, k=3):
+def retrieve_whitepaper_chunks(question, k=3, *, vector_directory="chroma_db", api_key=None):
     """원문 표시용 독립 읽기 검색. 기존 rag_pipeline에는 손대지 않습니다.
 
     이 보조 검색은 질문에 관련된 청크를 반환합니다. 해당 청크들이 실제
     LLM 답변에 사용된 청크와 항상 1:1 같다고 보장하지 않습니다.
     """
-    embedding = OpenAIEmbeddings(model="text-embedding-3-small")
+    embedding = OpenAIEmbeddings(model="text-embedding-3-small", api_key=api_key)
     vectorstore = Chroma(
         collection_name="ai_ethics",  # 원본 실행 코드와 동일
         embedding_function=embedding,
-        persist_directory="chroma_db",
+        persist_directory=vector_directory,
     )
     return vectorstore.as_retriever(search_kwargs={"k": k}).invoke(question)

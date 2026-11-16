@@ -15,34 +15,16 @@ st.set_page_config(
     page_title="AIVLE Insight | AI 학습 도우미",
     page_icon="✨",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded",  # Streamlit의 기본 접기/펼치기 화살표 사용
 )
 st.html(ROOT / "styles.css")
 
-# AIVLE_SIDEBAR_TOGGLE_V1
-if "aivle_sidebar_open" not in st.session_state:
-    st.session_state.aivle_sidebar_open = True
-
-def toggle_aivle_sidebar():
-    st.session_state.aivle_sidebar_open = (
-        not st.session_state.aivle_sidebar_open
-    )
-
-# 사이드바가 닫힌 경우에만 숨김 스타일 적용
-if not st.session_state.aivle_sidebar_open:
-    st.html("""
-    <style>
-    [data-testid="stSidebar"] {
-        display: none !important;
-    }
-    [data-testid="stSidebarCollapsedControl"] {
-        display: none !important;
-    }
-    </style>
-    """)
+# ── 기존 파일 경로는 유지하면서 Streamlit Cloud PDF 업로드도 지원 ──
+import hashlib
+import tempfile
+import uuid
 
 
-# ── 실제 파일 체크: 노트북 원본의 path 규칙을 해석만 하고 변경하지 않음 ──
 def project_path() -> Path:
     try:
         import sys
@@ -53,9 +35,22 @@ def project_path() -> Path:
     return Path.cwd()
 
 
+def openai_key() -> str:
+    # Streamlit Secrets > 환경변수 > 화면 입력(단일 사용자 테스트) 순서
+    try:
+        v = st.secrets.get("OPENAI_API_KEY", "")
+        if v:
+            return str(v)
+    except Exception:
+        pass
+    return os.environ.get("OPENAI_API_KEY", "") or st.session_state.get("aivle_api_key_input", "")
+
+
 work_dir = project_path()
-pdf_ready = (work_dir / PDF_NAME).is_file()
-key_ready = (work_dir / "api_key.txt").is_file()
+static_pdf = work_dir / PDF_NAME
+uploaded_pdf = st.session_state.get("aivle_pdf_upload")
+pdf_ready = bool(uploaded_pdf) or static_pdf.is_file()
+key_ready = bool(openai_key()) or (work_dir / "api_key.txt").is_file()
 
 if "dialogue" not in st.session_state:
     st.session_state.dialogue = []
@@ -67,24 +62,72 @@ if "active_question" not in st.session_state:
     st.session_state.active_question = None
 
 
-# 기존 파이프라인은 첫 질문 때만 초기화해 중복 리인덱싱을 줄입니다.
-# 주의: 원본 rag_pipeline 내부에는 reset_collection()이 있어 신규 세션에서 재구축합니다.
-@st.cache_resource(scope="session", show_spinner=False)
+# 원본 함수 rag_pipeline()의 청킹/모델/프롬프트를 그대로 사용합니다.
+# 웹 업로드는 세션별 임시 PDF와 Chroma 디렉터리를 써서 다른 테스트와 섞이지 않게 합니다.
 def get_rag():
-    from rag_backend import initialize_rag
-    return initialize_rag()
+    from rag_backend import rag_pipeline
+    pdf = st.session_state.get("aivle_pdf_upload")
+    key = openai_key()
+
+    # 구글 드라이브 api_key.txt 사용법을 유지하되, 업로드 PDF에도 적용
+    if not key and (work_dir / "api_key.txt").is_file():
+        for line in (work_dir / "api_key.txt").read_text(encoding="utf-8").splitlines():
+            if "=" in line:
+                name, value = line.split("=", 1)
+                if name.strip() == "OPENAI_API_KEY":
+                    key = value.strip().strip(chr(34)).strip(chr(39))
+                    break
+
+    if not key:
+        raise RuntimeError("OpenAI API 키를 입력하거나 Streamlit Secrets를 설정하세요.")
+
+    if pdf is not None:
+        content = pdf.getvalue()
+        if not content.startswith(b"%PDF-"):
+            raise ValueError("PDF 형식의 백서만 업로드할 수 있습니다.")
+        digest = hashlib.sha256(content).hexdigest()
+        if "rag_workdir" not in st.session_state:
+            st.session_state.rag_workdir = str(
+                Path(tempfile.gettempdir()) / "aivle_school_sessions" / uuid.uuid4().hex
+            )
+        session_dir = Path(st.session_state.rag_workdir)
+        session_dir.mkdir(parents=True, exist_ok=True)
+        pdf_path = session_dir / (digest[:16] + ".pdf")
+        if not pdf_path.exists():
+            pdf_path.write_bytes(content)
+        vector_dir = session_dir / ("chroma_" + digest[:16])
+    else:
+        if not static_pdf.is_file():
+            raise FileNotFoundError("백서 PDF를 먼저 업로드하세요.")
+        pdf_path = static_pdf
+        digest = hashlib.sha256(static_pdf.read_bytes()).hexdigest()
+        if "rag_workdir" not in st.session_state:
+            st.session_state.rag_workdir = str(
+                Path(tempfile.gettempdir()) / "aivle_school_sessions" / uuid.uuid4().hex
+            )
+        vector_dir = Path(st.session_state.rag_workdir) / ("chroma_" + digest[:16])
+        vector_dir.parent.mkdir(parents=True, exist_ok=True)
+
+    # 최초 질문에서 한 번만 임베딩/Chroma 구축; 이후 같은 백서에서는 재사용
+    identity = (digest, hashlib.sha256(key.encode()).hexdigest())
+    if st.session_state.get("live_rag_identity") != identity:
+        st.session_state.live_rag_chain = rag_pipeline(
+            str(pdf_path), vector_directory=str(vector_dir), api_key=key
+        )
+        st.session_state.live_rag_identity = identity
+        st.session_state.live_vector_directory = str(vector_dir)
+        st.session_state.live_api_key = key
+    return st.session_state.live_rag_chain
 
 
 def extract_docs(question):
     from rag_backend import retrieve_whitepaper_chunks
-    docs = retrieve_whitepaper_chunks(question, k=3)
-    return [
-        {
-            "text": d.page_content,
-            "metadata": dict(d.metadata or {}),
-        }
-        for d in docs
-    ]
+    docs = retrieve_whitepaper_chunks(
+        question, k=3,
+        vector_directory=st.session_state.get("live_vector_directory", "chroma_db"),
+        api_key=st.session_state.get("live_api_key"),
+    )
+    return [{"text": d.page_content, "metadata": dict(d.metadata or {})} for d in docs]
 
 
 def create_mock_result(question):
@@ -116,10 +159,10 @@ def submit_question(question):
     elif not (pdf_ready and key_ready):
         result = {
             "question": q, "mode": "missing",
-            "answer": "**실제 RAG 연결 전입니다.** 프로젝트 폴더에 `AIVLE School 백서.pdf`와 `api_key.txt`를 배치한 뒤 다시 질문하세요.",
+            "answer": "**실제 RAG 연결 전입니다.** 사이드바에서 백서 PDF를 업로드하고 OpenAI API 키를 설정한 뒤 다시 질문하세요.",
             "docs": [],
         }
-        message = "백서 파일 또는 API 키 파일이 없어 검색을 실행하지 못했어요."
+        message = "사이드바에서 PDF·API 키 연결 상태를 확인하세요."
     else:
         try:
             with st.spinner("백서에서 관련 내용을 찾고 있어요..."):
@@ -132,7 +175,7 @@ def submit_question(question):
             # 사용자에게 API 키 등 민감 정보가 포함될 수 있는 예외 문자열을 노출하지 않음
             result = {
                 "question": q, "mode": "error",
-                "answer": "RAG 요청에 실패했습니다. 라이브러리 설치, API 키 형식, 파일 경로와 서버 로그를 확인하세요.",
+                "answer": "RAG 요청에 실패했습니다. 백서 PDF 형식, API 키, API 결제 한도 및 서버 로그를 확인하세요.",
                 "docs": [],
             }
             message = "검색 중 오류가 발생했어요. 서버 로그에서 원인을 확인해 주세요."
@@ -186,12 +229,12 @@ def render_overview():
         with st.container(key="metric_mode"):
             st.caption("AI 모드")
             st.markdown("**" + ("UI 시연" if st.session_state.preview_mode else "실제 RAG") + "**")
-            st.caption("오픈AI 질문 응답" if not st.session_state.preview_mode else "API 사용 없음")
+            st.caption("OpenAI API 호출" if not st.session_state.preview_mode else "API 사용 없음")
     with box2:
         with st.container(key="metric_document"):
             st.caption("지식 베이스")
             st.markdown("**AIVLE 백서**")
-            st.caption("PDF 인식됨" if pdf_ready else "PDF 연결 대기")
+            st.caption("PDF 업로드 완료" if uploaded_pdf else ("PDF 인식됨" if pdf_ready else "PDF 연결 대기"))
     with box3:
         with st.container(key="metric_retrieval"):
             st.caption("검색 방식")
@@ -273,7 +316,7 @@ def render_guide():
         st.write("1. 왼쪽 채팅이나 질문 예시를 클릭해 질문하세요.")
         st.write("2. 오른쪽 AI 답변 탭에서 요약을, 원문 탭에서 관련 청크를 확인하세요.")
         st.write("3. 사이드바에서 목업 모드를 끄면 실제 RAG를 사용합니다 (파일 필요).")
-        st.info("추가 메뉴는 ui_sidebar.py의 NAV_OPTIONS / render_sidebar에서 구현하면 됩니다.")
+        st.info("사이드바에서 백서 PDF와 API 키를 연결할 수 있습니다. PDF를 올리고 목업 모드를 끄면 첫 질문 시 임베딩이 실행됩니다.")
 
 
 # ── 네비게이션 / 실행 ──
@@ -286,26 +329,9 @@ if st.session_state.active_question:
     submit_question(pending)
 
 with st.container(key="topbar"):
-    menu, left, right = st.columns(
-        [1.5, 4.5, 2],
-        vertical_alignment="center"
-    )
-
-    with menu:
-        st.button(
-            "☰ 메뉴 닫기"
-            if st.session_state.aivle_sidebar_open
-            else "☰ 메뉴 열기",
-            key="sidebar_toggle_button",
-            use_container_width=True,
-            on_click=toggle_aivle_sidebar,
-        )
-
+    left, right = st.columns([5, 2], vertical_alignment="center")
     with left:
-        st.markdown(
-            "**✳ AIVLE INSIGHT** &nbsp; / &nbsp; " + selected
-        )
-
+        st.markdown("**✳ AIVLE INSIGHT** &nbsp; / &nbsp; " + selected)
     with right:
         st.caption("DX CONSULTANT · AI LEARNING HUB")
 

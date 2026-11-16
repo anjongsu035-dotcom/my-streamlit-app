@@ -1,5 +1,6 @@
 """사이드바 UI: 향후 기능 추가는 이 파일에서 관리합니다."""
 from pathlib import Path
+import os
 import streamlit as st
 
 
@@ -18,6 +19,23 @@ def render_sidebar(*, pdf_ready: bool, key_ready: bool) -> tuple[str, bool]:
             "서비스 탐색", NAV_OPTIONS,
             key="current_menu", label_visibility="collapsed",
         )
+
+        st.markdown('<div class="side-group-label">KNOWLEDGE BASE</div>', unsafe_allow_html=True)
+        st.file_uploader(
+            "📄 백서 PDF 업로드", type=["pdf"], key="aivle_pdf_upload",
+            help="업로드 파일은 이 실행 세션의 임시 저장소에만 보관되며 GitHub에 게시되지 않습니다.",
+        )
+        try:
+            _cloud_secret_ready = bool(st.secrets.get("OPENAI_API_KEY", ""))
+        except Exception:
+            _cloud_secret_ready = False
+        if not _cloud_secret_ready and not os.environ.get("OPENAI_API_KEY"):
+            st.text_input(
+                "🔑 OpenAI API 키 (테스트용)", type="password",
+                key="aivle_api_key_input",
+                help="가능하면 Streamlit Cloud의 Secrets에 OPENAI_API_KEY를 등록하세요. GitHub에 키를 올리지 마세요.",
+            )
+        st.caption("왼쪽 위의 ◀ / ▶ 버튼으로 사이드바를 접거나 다시 열 수 있습니다.")
 
         st.markdown('<div class="side-group-label">COMING SOON</div>', unsafe_allow_html=True)
         st.button("🗓 학습 일정 (준비 중)", disabled=True, use_container_width=True)
@@ -39,5 +57,5 @@ def render_sidebar(*, pdf_ready: bool, key_ready: bool) -> tuple[str, bool]:
             else:
                 st.warning("백서 PDF 또는 API 키 파일 누락", icon="⚠️")
 
-        st.caption("확장 위치: ui_sidebar.py → NAV_OPTIONS 및 render_sidebar")
+        st.caption("업로드한 PDF는 세션 종료 또는 서버 재시작 시 사라질 수 있습니다.")
     return selected, preview
