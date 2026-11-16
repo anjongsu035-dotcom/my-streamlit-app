@@ -1,7 +1,5 @@
-"""AIVLE SCHOOL | AlignIQ 스타일의 데스크톱 우선 Streamlit UI.
-
-사용자 제공 노트북의 원본 RAG는 rag_backend.py에 분리 보존되어 있습니다.
-목업 모드에서는 실제 PDF 검색이나 OpenAI 요청을 수행하지 않습니다.
+"""AIVLE School Streamlit front end; RAG logic comes from original notebook.
+Original rag_pipeline() creates index in Colab; Streamlit reloads identical chain.
 """
 from pathlib import Path
 import os
@@ -19,115 +17,35 @@ st.set_page_config(
 )
 st.html(ROOT / "styles.css")
 
-# ── 기존 파일 경로는 유지하면서 Streamlit Cloud PDF 업로드도 지원 ──
-import hashlib
-import tempfile
-import uuid
-
-
-def project_path() -> Path:
-    try:
-        import sys
-        if "google.colab" in sys.modules:
-            return Path("/content/drive/MyDrive/project04/")
-    except Exception:
-        pass
-    return Path.cwd()
+# ── 배포된 Colab Chroma 인덱스를 읽기만 합니다. Streamlit에서 PDF 업로드/재임베딩 금지 ──
+INDEX_DIR = ROOT / "chroma_db"
+INDEX_READY = (INDEX_DIR / "chroma.sqlite3").is_file()
 
 
 def openai_key() -> str:
-    # Streamlit Secrets > 환경변수 > 화면 입력(단일 사용자 테스트) 순서
     try:
-        v = st.secrets.get("OPENAI_API_KEY", "")
-        if v:
-            return str(v)
+        return str(st.secrets.get("OPENAI_API_KEY", "")) or os.environ.get("OPENAI_API_KEY", "")
     except Exception:
-        pass
-    return os.environ.get("OPENAI_API_KEY", "") or st.session_state.get("aivle_api_key_input", "")
+        return os.environ.get("OPENAI_API_KEY", "")
 
 
-work_dir = project_path()
-static_pdf = work_dir / PDF_NAME
-uploaded_pdf = st.session_state.get("aivle_pdf_upload")
-pdf_ready = bool(uploaded_pdf) or static_pdf.is_file()
-key_ready = bool(openai_key()) or (work_dir / "api_key.txt").is_file()
+key_ready = bool(openai_key())
 
-if "dialogue" not in st.session_state:
-    st.session_state.dialogue = []
-if "latest_result" not in st.session_state:
-    st.session_state.latest_result = None
-if "history" not in st.session_state:
-    st.session_state.history = []
-if "active_question" not in st.session_state:
-    st.session_state.active_question = None
+for name, value in {
+    "dialogue": [],
+    "latest_result": None,
+    "history": [],
+    "active_question": None,
+}.items():
+    if name not in st.session_state:
+        st.session_state[name] = value
 
 
-# 원본 함수 rag_pipeline()의 청킹/모델/프롬프트를 그대로 사용합니다.
-# 웹 업로드는 세션별 임시 PDF와 Chroma 디렉터리를 써서 다른 테스트와 섞이지 않게 합니다.
-def get_rag():
-    from rag_backend import rag_pipeline
-    pdf = st.session_state.get("aivle_pdf_upload")
-    key = openai_key()
-
-    # 구글 드라이브 api_key.txt 사용법을 유지하되, 업로드 PDF에도 적용
-    if not key and (work_dir / "api_key.txt").is_file():
-        for line in (work_dir / "api_key.txt").read_text(encoding="utf-8").splitlines():
-            if "=" in line:
-                name, value = line.split("=", 1)
-                if name.strip() == "OPENAI_API_KEY":
-                    key = value.strip().strip(chr(34)).strip(chr(39))
-                    break
-
-    if not key:
-        raise RuntimeError("OpenAI API 키를 입력하거나 Streamlit Secrets를 설정하세요.")
-
-    if pdf is not None:
-        content = pdf.getvalue()
-        if not content.startswith(b"%PDF-"):
-            raise ValueError("PDF 형식의 백서만 업로드할 수 있습니다.")
-        digest = hashlib.sha256(content).hexdigest()
-        if "rag_workdir" not in st.session_state:
-            st.session_state.rag_workdir = str(
-                Path(tempfile.gettempdir()) / "aivle_school_sessions" / uuid.uuid4().hex
-            )
-        session_dir = Path(st.session_state.rag_workdir)
-        session_dir.mkdir(parents=True, exist_ok=True)
-        pdf_path = session_dir / (digest[:16] + ".pdf")
-        if not pdf_path.exists():
-            pdf_path.write_bytes(content)
-        vector_dir = session_dir / ("chroma_" + digest[:16])
-    else:
-        if not static_pdf.is_file():
-            raise FileNotFoundError("백서 PDF를 먼저 업로드하세요.")
-        pdf_path = static_pdf
-        digest = hashlib.sha256(static_pdf.read_bytes()).hexdigest()
-        if "rag_workdir" not in st.session_state:
-            st.session_state.rag_workdir = str(
-                Path(tempfile.gettempdir()) / "aivle_school_sessions" / uuid.uuid4().hex
-            )
-        vector_dir = Path(st.session_state.rag_workdir) / ("chroma_" + digest[:16])
-        vector_dir.parent.mkdir(parents=True, exist_ok=True)
-
-    # 최초 질문에서 한 번만 임베딩/Chroma 구축; 이후 같은 백서에서는 재사용
-    identity = (digest, hashlib.sha256(key.encode()).hexdigest())
-    if st.session_state.get("live_rag_identity") != identity:
-        st.session_state.live_rag_chain = rag_pipeline(
-            str(pdf_path), vector_directory=str(vector_dir), api_key=key
-        )
-        st.session_state.live_rag_identity = identity
-        st.session_state.live_vector_directory = str(vector_dir)
-        st.session_state.live_api_key = key
-    return st.session_state.live_rag_chain
-
-
-def extract_docs(question):
-    from rag_backend import retrieve_whitepaper_chunks
-    docs = retrieve_whitepaper_chunks(
-        question, k=3,
-        vector_directory=st.session_state.get("live_vector_directory", "chroma_db"),
-        api_key=st.session_state.get("live_api_key"),
-    )
-    return [{"text": d.page_content, "metadata": dict(d.metadata or {})} for d in docs]
+@st.cache_resource(show_spinner=False)
+def get_rag(index_dir: str, api_key: str):
+    os.environ["OPENAI_API_KEY"] = api_key
+    from rag_backend import load_existing_rag
+    return load_existing_rag(index_dir)
 
 
 def create_mock_result(question):
@@ -155,31 +73,38 @@ def submit_question(question):
     st.session_state.dialogue.append({"role": "user", "content": q})
     if st.session_state.preview_mode:
         result = create_mock_result(q)
-        message = "오른쪽에 **디자인 미리보기 결과**를 표시했어요. (실제 RAG 답변 아님)"
-    elif not (pdf_ready and key_ready):
+        message = "디자인 시연용 답변입니다. 실제 백서 검색 결과가 아닙니다."
+    elif not (INDEX_READY and key_ready):
         result = {
             "question": q, "mode": "missing",
-            "answer": "**실제 RAG 연결 전입니다.** 사이드바에서 백서 PDF를 업로드하고 OpenAI API 키를 설정한 뒤 다시 질문하세요.",
+            "answer": "**백서 색인 또는 API 키가 연결되지 않았습니다.** 코랩에서 청킹한 Chroma를 배포하고, Streamlit Secrets를 확인해 주세요.",
             "docs": [],
         }
-        message = "사이드바에서 PDF·API 키 연결 상태를 확인하세요."
+        message = result["answer"]
     else:
         try:
-            with st.spinner("백서에서 관련 내용을 찾고 있어요..."):
-                rag_chain = get_rag()  # 원본 변수명 및 호출 방식 유지
+            with st.spinner("백서에서 관련 문단을 검색하고 답변하는 중..."):
+                # Call the user's original RAG LCEL chain, unchanged:
+                # rag_chain.invoke({"input": question})
+                rag_chain, retriever = get_rag(str(INDEX_DIR), openai_key())
                 answer = rag_chain.invoke({"input": q})
-                docs = extract_docs(q)
+                # Separate retrieval only for the right-side source-evidence tab.
+                related_docs = retriever.invoke(q)
+                docs = [
+                    {"text": d.page_content, "metadata": dict(d.metadata or {})}
+                    for d in related_docs
+                ]
             result = {"question": q, "mode": "live", "answer": str(answer), "docs": docs}
-            message = "백서 기반 답변을 오른쪽 패널에 정리했어요."
+            message = str(answer)
         except Exception as exc:
-            # 사용자에게 API 키 등 민감 정보가 포함될 수 있는 예외 문자열을 노출하지 않음
             result = {
                 "question": q, "mode": "error",
-                "answer": "RAG 요청에 실패했습니다. 백서 PDF 형식, API 키, API 결제 한도 및 서버 로그를 확인하세요.",
+                "answer": "백서 검색 중 오류가 발생했습니다. Streamlit Cloud 로그와 색인·API 설정을 확인하세요.",
                 "docs": [],
             }
-            message = "검색 중 오류가 발생했어요. 서버 로그에서 원인을 확인해 주세요."
-            print(f"[RAG error] {type(exc).__name__}")
+            message = result["answer"]
+            print(f"[RAG error] {type(exc).__name__}: {exc}")
+    # 실제 RAG의 답변 전체가 채팅 왼쪽에도 보입니다.
     st.session_state.dialogue.append({"role": "assistant", "content": message})
     st.session_state.latest_result = result
     st.session_state.history.insert(0, q)
@@ -207,7 +132,7 @@ def render_reference_docs(result):
     if not docs:
         st.info("현재 표시할 백서 원문이 없습니다.")
         return
-    st.caption("아래는 동일 질문으로 별도 검색한 관련 청크입니다. LLM 답변에 사용된 문단과 반드시 일치하지는 않습니다.")
+    st.caption("아래 청크는 이번 AI 답변을 만들 때 실제로 사용된 검색 문단입니다.")
     for ix, doc in enumerate(docs, start=1):
         meta = doc.get("metadata") or {}
         source_name = Path(str(meta.get("source", "백서 PDF"))).name
@@ -219,27 +144,11 @@ def render_reference_docs(result):
 
 
 def render_overview():
+    # 이전의 AI 모드 / AIVLE 백서 / Chroma+RAG 상태 카드 3개 제거
     with st.container(key="hero_panel"):
         st.caption("AIVLE SCHOOL / KNOWLEDGE WORKSPACE")
         st.markdown("# 안녕하세요, 에이블러 👋")
-        st.write("궁금한 교육 정보를 질문하면 왼쪽에서 대화하고, 오른쪽에서 백서 근거와 답변을 확인할 수 있어요.")
-
-    box1, box2, box3 = st.columns(3, gap="small")
-    with box1:
-        with st.container(key="metric_mode"):
-            st.caption("AI 모드")
-            st.markdown("**" + ("UI 시연" if st.session_state.preview_mode else "실제 RAG") + "**")
-            st.caption("OpenAI API 호출" if not st.session_state.preview_mode else "API 사용 없음")
-    with box2:
-        with st.container(key="metric_document"):
-            st.caption("지식 베이스")
-            st.markdown("**AIVLE 백서**")
-            st.caption("PDF 업로드 완료" if uploaded_pdf else ("PDF 인식됨" if pdf_ready else "PDF 연결 대기"))
-    with box3:
-        with st.container(key="metric_retrieval"):
-            st.caption("검색 방식")
-            st.markdown("**Chroma + RAG**")
-            st.caption("원본 코드 그대로 유지")
+        st.write("왼쪽에서 질문하고, 오른쪽에서 백서 근거와 답변을 확인할 수 있어요.")
 
 
 def render_chat_panel():
@@ -253,11 +162,17 @@ def render_chat_panel():
 
         with st.container(height=480, key="chat_scroll", border=False):
             if not st.session_state.dialogue:
-                with st.chat_message("assistant", avatar="✨"):
-                    st.write("안녕하세요! 백서에서 궁금한 내용을 물어보세요.")
-                    st.caption("현재 UI를 테스트 중이라면 사이드바의 목업 모드를 사용하세요.")
-            for item in st.session_state.dialogue:
-                with st.chat_message(item["role"], avatar=("✨" if item["role"] == "assistant" else "👤")):
+                with st.container(key="chat_assistant_welcome"):
+                    st.markdown("**✦ AI 학습 도우미**")
+                    st.write("안녕하세요! AIVLE SCHOOL에 관해 궁금한 내용을 입력해 보세요.")
+            for index, item in enumerate(st.session_state.dialogue):
+                role = item["role"]
+                row_key = f"chat_user_{index}" if role == "user" else f"chat_assistant_{index}"
+                with st.container(key=row_key):
+                    if role == "user":
+                        st.caption("나")
+                    else:
+                        st.caption("✦ AI 학습 도우미")
                     st.markdown(item["content"])
 
         st.chat_input(
@@ -265,7 +180,7 @@ def render_chat_panel():
             key="aivle_question_input",
             on_submit=submit_from_chat,
         )
-        st.caption("원본 백서 기반 · 목업 모드의 답변은 실제 문서 내용이 아닙니다")
+        st.caption("실제 검색은 Colab에서 구축한 Chroma 인덱스 사용 · 목업은 데모용")
 
 
 def render_result_panel():
@@ -289,7 +204,7 @@ def render_result_panel():
 
         st.caption("검색 질문")
         with st.container(key="question_chip"):
-            st.markdown("**" + result["question"] + "**")
+            st.markdown("**" + result["question"].replace("<", "&lt;").replace(">", "&gt;") + "**")
 
         if result["mode"] == "mock":
             st.warning("디자인 목업 결과 · 실제 백서 검색 아님", icon="🎨")
@@ -306,8 +221,8 @@ def render_result_panel():
             render_reference_docs(result)
         with notes_tab:
             st.markdown("**현재 검색 방식**")
-            st.write("기존 `rag_chain.invoke({'input': 질문})`의 응답을 표시합니다.")
-            st.write("관련 원문은 동일 질문으로 Chroma에서 **별도로** 조회합니다.")
+            st.write("코랩에서 네 `rag_pipeline()`으로 만든 `chroma_db`를 불러옵니다.")
+            st.write("관련 원문은 이번 답변의 LLM context에 사용된 청크입니다.")
             st.caption("문서 메타데이터에 출처/페이지가 없으면 임의 생성하지 않습니다.")
 
 
@@ -315,12 +230,12 @@ def render_guide():
     with st.expander("💡 사용 방법 및 확장 영역", expanded=False):
         st.write("1. 왼쪽 채팅이나 질문 예시를 클릭해 질문하세요.")
         st.write("2. 오른쪽 AI 답변 탭에서 요약을, 원문 탭에서 관련 청크를 확인하세요.")
-        st.write("3. 사이드바에서 목업 모드를 끄면 실제 RAG를 사용합니다 (파일 필요).")
-        st.info("사이드바에서 백서 PDF와 API 키를 연결할 수 있습니다. PDF를 올리고 목업 모드를 끄면 첫 질문 시 임베딩이 실행됩니다.")
+        st.write("3. 코랩에서 백서 인덱스를 만들고 Streamlit Secrets에 키를 등록한 뒤 목업 모드를 끕니다.")
+        st.info("백서 PDF의 청킹·임베딩은 코랩에서 수행합니다. Streamlit은 배포된 Chroma 색인만 읽습니다.")
 
 
 # ── 네비게이션 / 실행 ──
-selected, _ = render_sidebar(pdf_ready=pdf_ready, key_ready=key_ready)
+selected, _ = render_sidebar(index_ready=INDEX_READY, key_ready=key_ready)
 
 # 질문 처리: 이벤트 발생 시 상단에서 먼저 처리해 두 패널에 동시에 반영
 if st.session_state.active_question:

@@ -296,5 +296,59 @@
   visibility: visible !important;
   opacity: 1 !important;
 }
-/* 업로드·비밀 키 필드는 사이드바에서만 사용 */
-.stApp [data-testid="stSidebar"] [data-testid="stFileUploader"] {border-color:#B9E8EF;}
+
+
+
+/* FEEDBACK V3: without top status cards, chat role alignment and question overflow fixes */
+.st-key-hero_panel { padding-bottom: 12px; }
+.st-key-chat_panel, .st-key-result_panel { margin-top: 12px; }
+.st-key-question_chip,
+.st-key-question_chip > div,
+.st-key-question_chip p,
+.st-key-question_chip strong {
+  max-width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+.st-key-question_chip { overflow: hidden; }
+.st-key-chat_scroll [class*="st-key-chat_user_"] {
+  width: fit-content !important;
+  max-width: 83% !important;
+  min-width: 0 !important;
+  margin-left: auto !important;
+  margin-right: 0 !important;
+  border-radius: 17px 17px 5px 17px;
+  background: linear-gradient(100deg,#D9F6FA,#E8F6FF);
+  border: 1px solid #BCE7EF;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.st-key-chat_scroll [class*="st-key-chat_assistant_"] {
+  width: fit-content !important;
+  max-width: 90% !important;
+  min-width: 0 !important;
+  margin-left: 0 !important;
+  margin-right: auto !important;
+  border-radius: 17px 17px 17px 5px;
+  background: rgba(255,255,255,.96);
+  border: 1px solid #DDEFF4;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.st-key-chat_scroll [class*="st-key-chat_assistant_"] p,
+.st-key-chat_scroll [class*="st-key-chat_user_"] p {
+  margin-top: 0;
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+}
+@media(max-width:900px){
+  .st-key-chat_scroll [class*="st-key-chat_user_"],
+  .st-key-chat_scroll [class*="st-key-chat_assistant_"] {max-width:95% !important;}
+}
