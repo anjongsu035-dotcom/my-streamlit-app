@@ -5,6 +5,8 @@
 import os
 import base64
 import html
+import logging
+import chromadb
 from io import BytesIO
 from pathlib import Path
 from operator import itemgetter
@@ -48,8 +50,6 @@ STYLE = r"""<style>
 .stApp [data-testid="stSidebar"] .stRadio label:has(input:checked) { background:linear-gradient(90deg,#D9F7F9,#E7F4FE);color:#008EA8;font-weight:700; }
 .st-key-side_help { padding:14px 13px;background:#F4FCFE;border:1px solid #DAEEF2;border-radius:16px; }
 .st-key-side_help p { font-size:12px; }
-.st-key-topbar { background:rgba(255,255,255,.82);border:1px solid #E2EFF2;border-radius:20px;padding:11px 18px;box-shadow:var(--shadow); }
-.st-key-topbar p { font-size:12px;margin:0; }
 .st-key-hero_panel { padding:20px 5px 16px; }
 .st-key-hero_panel [data-testid="stCaptionContainer"] p { color:#11AABD;font-size:11px;letter-spacing:.1em;font-weight:800; }
 .st-key-hero_panel h1 { font-weight:800;font-size:clamp(28px,2.55vw,40px);margin:6px 0 4px; }
@@ -99,7 +99,6 @@ STYLE = r"""<style>
 /* 긴 질문·줄바꿈 시 파란 박스 밖으로 텍스트가 나가지 않도록 고정 */
 .aivle-question-chip { box-sizing:border-box;display:block;width:100%;max-width:100%;min-width:0;margin:9px 0 10px;padding:13px 17px;border:1px solid #BEE9EF;border-radius:14px;background:linear-gradient(105deg,#E5FAFC,#EAF5FE);color:#204956;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-size:14px;line-height:1.7; }
 /* 작은 화면에서 로고와 두 패널이 서로 침범하지 않도록 처리 */
-.st-key-topbar { min-width:0; }
 @media(max-width:760px) { .aivle-chat-bubble{max-width:93%;} .aivle-question-chip {font-size:13px;} }
 </style>"""
 st.html(STYLE)
@@ -107,6 +106,9 @@ st.html(STYLE)
 ROOT = Path(__file__).resolve().parent
 INDEX_PATH = ROOT / 'chroma_db'
 INDEX_READY = (INDEX_PATH / 'chroma.sqlite3').is_file()
+COLLECTION_NAME = "AIVLER_Guide"  # 원본 DX 4차 rag_pipeline()에서 직접 확인
+logger = logging.getLogger("aivle.rag")
+
 
 
 def read_openai_key():
@@ -135,14 +137,26 @@ def get_chain(api_key):
     """
     os.environ['OPENAI_API_KEY'] = api_key
 
+    # 코랩의 저장된 컬렉션 확인: 읽기 전용 검증이며 reset/재임베딩하지 않음
+    client = chromadb.PersistentClient(path=str(INDEX_PATH))
+    existing_collections = [c.name for c in client.list_collections()]
+    if COLLECTION_NAME not in existing_collections:
+        raise RuntimeError(
+            f"Chroma 컬렉션 불일치: 필요={COLLECTION_NAME!r}, "
+            f"저장소에 있는 컬렉션={existing_collections}. "
+            "코랩에서 생성한 Chroma와 배포된 Chroma가 같은지 확인하세요."
+        )
+    count = client.get_collection(name=COLLECTION_NAME).count()
+    if count == 0:
+        raise RuntimeError(f"Chroma 컬렉션 {COLLECTION_NAME!r}에 저장된 청크가 없습니다.")
+    logger.info("Chroma 준비 완료: collection=%s, chunks=%s", COLLECTION_NAME, count)
+
     embedding = OpenAIEmbeddings(model="text-embedding-3-small")
     vectorstore = Chroma(
-        collection_name="ai_ethics",  # 원본 노트북의 실제 실행 코드
+        collection_name=COLLECTION_NAME,
         embedding_function=embedding,
         persist_directory=str(INDEX_PATH),
     )
-    if vectorstore._collection.count() == 0:
-        raise RuntimeError('저장된 백서 청크가 없습니다. 코랩 인덱싱을 먼저 실행하세요.')
 
     retriever = vectorstore.as_retriever()
     llm = ChatOpenAI(model='gpt-4o-mini', temperature=0)
@@ -294,16 +308,17 @@ def run_question(question):
                     for d in matched_docs
                 ]
             ok = True
-        except Exception as exc:
-            print(f'[RAG ERROR] {type(exc).__name__}: {exc}')
+        except Exception:
+            # 실제 예외 스택을 Streamlit Cloud 로그에 기록 (사용자 질문/키는 기록하지 않음)
+            logger.exception('[RAG ERROR] 백서 검색 실행 오류')
             full_answer = '백서 검색 중 오류가 발생했습니다. Streamlit Cloud의 앱 로그와 API/Chroma 설정을 확인해 주세요.'
             ok = False
 
     if ok:
         try:
             short_answer = make_short_llm_answer(full_answer, api_key)
-        except Exception as exc:
-            print(f'[SUMMARY ERROR] {type(exc).__name__}: {exc}')
+        except Exception:
+            logger.exception('[SUMMARY ERROR] 짧은 답변 생성 오류')
             # 요약만 실패해도 원래 RAG 상세 답변은 오른쪽에 정상 표시
             short_answer = str(full_answer)[:250] + ('…' if len(str(full_answer)) > 250 else '')
     else:
@@ -343,7 +358,7 @@ with st.sidebar:
         st.markdown('**백서 검색 안내**')
         st.caption('PDF의 로딩·청킹·임베딩은 기존 코랩 RAG에서 수행합니다.')
         if INDEX_READY and read_openai_key():
-            st.caption('✅ 백서 검색 준비 완료')
+            st.caption('ℹ️ 인덱스 파일·API 키 감지 (검색 연결은 질문 시 검증)')
         elif not INDEX_READY:
             st.caption('⚠️ Chroma 인덱스가 없습니다')
         else:
@@ -354,13 +369,6 @@ if st.session_state.pending_question:
     pending = st.session_state.pending_question
     st.session_state.pending_question = None
     run_question(pending)
-
-with st.container(key='topbar'):
-    c1, c2 = st.columns([1, 3], vertical_alignment='center')
-    with c1:
-        st.image(BytesIO(AIVLE_LOGO_PNG), width=126)
-    with c2:
-        st.caption('KT AIVLE SCHOOL · AI LEARNING HUB')
 
 with st.container(key='hero_panel'):
     st.caption('AIVLE SCHOOL / KNOWLEDGE WORKSPACE')
