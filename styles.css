@@ -231,3 +231,230 @@
   .st-key-topbar [data-testid="stCaptionContainer"] { display:none; }
   .st-key-answer_card { padding:15px 13px; }
 }
+
+
+
+
+/* AIVLE_SKY_BLUE_THEME */
+
+:root {
+    --lavender: #19BEC9;
+    --lavender-dark: #087F94;
+    --lilac-light: #E9F9FB;
+    --blue: #78D6E8;
+    --blue-light: #EEFBFF;
+
+    --ink: #173847;
+    --muted: #668391;
+    --line: #DBEEF3;
+
+    --shadow:
+        0 10px 30px rgba(9,111,139,.07);
+}
+
+/* 전체 배경 */
+.stApp {
+    background:
+        radial-gradient(
+            ellipse at 10% 8%,
+            rgba(198,244,248,.65),
+            transparent 38%
+        ),
+        radial-gradient(
+            ellipse at 95% 15%,
+            rgba(207,237,255,.60),
+            transparent 39%
+        ),
+        linear-gradient(
+            130deg,
+            #F7FDFE,
+            #F5FBFF
+        );
+}
+
+/* 사이드바 */
+.stApp [data-testid="stSidebar"] {
+    background: rgba(255,255,255,.95);
+    border-right: 1px solid #DCEEF2;
+}
+
+.stApp [data-testid="stSidebar"]
+.stRadio label:hover {
+    background: #EEFBFC;
+}
+
+.stApp [data-testid="stSidebar"]
+.stRadio label:has(input:checked) {
+    background:
+        linear-gradient(100deg,#DDF8FA,#E5F5FF);
+    color: #087F94;
+    font-weight: 700;
+}
+
+/* 사이드바 브랜드 영역 */
+.st-key-side_brand {
+    background:
+        linear-gradient(135deg,#E6FAFB,#EDF8FF);
+    border-color: #CBEBF0;
+}
+
+.st-key-side_brand h3 {
+    color: #0B95A7;
+}
+
+.st-key-side_settings {
+    background: #F8FEFF;
+    border-color: #D6EDF2;
+}
+
+/* 메인 제목 */
+.st-key-hero_panel
+[data-testid="stCaptionContainer"] p {
+    color: #0A9DB0;
+}
+
+/* 정보 카드 */
+.st-key-metric_mode {
+    border-top-color: #19BEC9;
+}
+
+.st-key-metric_document {
+    border-top-color: #81D7EB;
+}
+
+.st-key-metric_retrieval {
+    border-top-color: #A0E5DD;
+}
+
+/* 왼쪽 채팅 패널 */
+.st-key-chat_panel {
+    background:
+        radial-gradient(
+            ellipse at 4% 100%,
+            rgba(198,245,248,.65),
+            transparent 45%
+        ),
+        radial-gradient(
+            ellipse at 96% 95%,
+            rgba(203,233,255,.62),
+            transparent 43%
+        ),
+        #FFFFFF;
+
+    border-color: #DCEEF3;
+}
+
+/* 오른쪽 백서 결과 패널 */
+.st-key-result_panel {
+    border-color: #DCEEF3;
+}
+
+/* 채팅 프로필 */
+.st-key-chat_scroll
+[data-testid="stChatMessageAvatarUser"] {
+    background: #DFF8F9;
+}
+
+.st-key-chat_scroll
+[data-testid="stChatMessageAvatarAssistant"] {
+    background: #E3F4FF;
+}
+
+/* 질문 입력창 */
+.st-key-chat_panel
+[data-testid="stChatInput"] {
+    border-color: #BDE5EC;
+    box-shadow:
+        0 8px 24px rgba(12,155,181,.10);
+}
+
+/* 백서 탭 */
+.st-key-result_panel
+[data-testid="stTabs"]
+[aria-selected="true"] {
+    color: #0B98AA;
+}
+
+/* 질문 카드 */
+.st-key-question_chip {
+    background:
+        linear-gradient(100deg,#E2F9FA,#EAF5FF);
+    border-color: #D0ECF1;
+}
+
+/* AI 답변 카드 */
+.st-key-answer_card {
+    background: #FBFEFF;
+    border-color: #E2EEF2;
+}
+
+.st-key-answer_card h4 {
+    color: #07879C;
+}
+
+/* 질문 시작 화면 */
+.st-key-empty_result {
+    background:
+        linear-gradient(155deg,#EEFDFF,#F2F9FF);
+    border-color: #B8E3EB;
+}
+
+.st-key-empty_result button {
+    border-color: #D0E9EF;
+    color: #207D91;
+}
+
+/* 검색 원문 카드 */
+.st-key-mock_doc {
+    border-color: #B6DFE9;
+    background: #F0FBFD;
+}
+
+/* 주요 버튼 */
+.stApp button[kind="primary"] {
+    background:
+        linear-gradient(95deg,#19BEC9,#59C6E4);
+    color: white;
+    border: none;
+}
+
+.stApp button:not(:disabled):hover {
+    border-color: #66CCD9;
+}
+
+.stApp input:focus,
+.stApp textarea:focus {
+    border-color: #48BFCF;
+}
+
+/* 사이드바 열기 / 닫기 버튼 */
+.st-key-sidebar_toggle_button button {
+    border: 1px solid #B9E7EE;
+    background: #EAFAFD;
+    color: #087F94;
+    border-radius: 12px;
+    font-weight: 700;
+    min-height: 38px;
+    font-size: 12px;
+}
+
+.st-key-sidebar_toggle_button button:hover {
+    background: #D8F4F8;
+    color: #086D81;
+}
+
+/* 데스크톱에서는 새 메뉴 버튼 사용 */
+@media (min-width: 769px) {
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarCollapsedControl"] {
+        display: none !important;
+    }
+}
+
+/* 좁은 화면 */
+@media (max-width: 900px) {
+    .st-key-sidebar_toggle_button button {
+        font-size: 11px;
+        padding: 5px 7px;
+    }
+}

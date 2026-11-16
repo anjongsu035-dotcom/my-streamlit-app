@@ -19,6 +19,29 @@ st.set_page_config(
 )
 st.html(ROOT / "styles.css")
 
+# AIVLE_SIDEBAR_TOGGLE_V1
+if "aivle_sidebar_open" not in st.session_state:
+    st.session_state.aivle_sidebar_open = True
+
+def toggle_aivle_sidebar():
+    st.session_state.aivle_sidebar_open = (
+        not st.session_state.aivle_sidebar_open
+    )
+
+# 사이드바가 닫힌 경우에만 숨김 스타일 적용
+if not st.session_state.aivle_sidebar_open:
+    st.html("""
+    <style>
+    [data-testid="stSidebar"] {
+        display: none !important;
+    }
+    [data-testid="stSidebarCollapsedControl"] {
+        display: none !important;
+    }
+    </style>
+    """)
+
+
 # ── 실제 파일 체크: 노트북 원본의 path 규칙을 해석만 하고 변경하지 않음 ──
 def project_path() -> Path:
     try:
@@ -263,9 +286,26 @@ if st.session_state.active_question:
     submit_question(pending)
 
 with st.container(key="topbar"):
-    left, right = st.columns([5, 2], vertical_alignment="center")
+    menu, left, right = st.columns(
+        [1.5, 4.5, 2],
+        vertical_alignment="center"
+    )
+
+    with menu:
+        st.button(
+            "☰ 메뉴 닫기"
+            if st.session_state.aivle_sidebar_open
+            else "☰ 메뉴 열기",
+            key="sidebar_toggle_button",
+            use_container_width=True,
+            on_click=toggle_aivle_sidebar,
+        )
+
     with left:
-        st.markdown("**✳ AIVLE INSIGHT** &nbsp; / &nbsp; " + selected)
+        st.markdown(
+            "**✳ AIVLE INSIGHT** &nbsp; / &nbsp; " + selected
+        )
+
     with right:
         st.caption("DX CONSULTANT · AI LEARNING HUB")
 

@@ -1,9 +1,9 @@
 [theme]
 base = "light"
-primaryColor = "#9475E5"
-backgroundColor = "#F8F9FD"
+primaryColor = "#19BEC9"
+backgroundColor = "#F7FDFE"
 secondaryBackgroundColor = "#FFFFFF"
-textColor = "#25253B"
+textColor = "#173847"
 font = "sans-serif"
 showSidebarBorder = false
 
