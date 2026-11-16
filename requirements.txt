@@ -1,10 +1,5 @@
-# Streamlit version from the uploaded notebook's requirements cell.
 streamlit==1.64.0
-# The original notebook's package choices and pins (keep RAG dependencies aligned).
 langchain-core==1.6.3
 langchain-openai==1.6.2
-langchain-text-splitters
-langchain-pymupdf4llm==1.28.0
-chromadb==1.5.9
 langchain-chroma==1.1.0
-pymupdf
+chromadb==1.5.9
