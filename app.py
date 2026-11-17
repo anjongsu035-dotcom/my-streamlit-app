@@ -525,7 +525,7 @@ def render_senior_board():
 # ── 기본 ◀ / ▶ 접기 버튼을 사용하는 사이드바 ──
 with st.sidebar:
     with st.container(key='side_brand'):
-        logo_path = ROOT / "aivle_logo.png"
+        logo_path = ROOT / "aivle.png"
         if logo_path.is_file():
             st.image(str(logo_path), width="stretch", alt="AIVLE SCHOOL 로고")
         else:
