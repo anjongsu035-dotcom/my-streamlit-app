@@ -46,13 +46,31 @@ STYLE = r"""<style>
 .stApp [data-testid="stSidebar"] { background:rgba(255,255,255,.97);border-right:1px solid var(--edge); }
 .stApp [data-testid="stSidebarContent"] { padding:20px 14px 25px; }
 /* 기본 사이드바 접기 버튼은 유지: display:none 선언 금지 */
-.st-key-side_brand { background:#FFFFFF;border:none;border-radius:0;padding:20px 0 14px;margin:0 0 20px;box-shadow:none;text-align:center; }
-.st-key-side_brand [data-testid="stImage"] {width:100%;}
-.st-key-side_brand [data-testid="stImage"] img {width:100% !important;max-width:100%;height:auto;object-fit:contain;}
-.st-key-side_brand [data-testid="stImage"] { display:flex;justify-content:center; }
-.st-key-side_brand [data-testid="stImage"] img {max-width:100%;height:auto;}
-.st-key-side_brand h3 { font-size:21px;color:#0898AD;margin:0; }
-.st-key-side_brand p { color:#71949D;font-size:10px;letter-spacing:.1em; }
+
+/* AIVLE 사이드바 대형 로고 */
+.st-key-side_brand {
+    background: #FFFFFF !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 8px 0 16px !important;
+    margin: 0 0 20px !important;
+}
+
+.st-key-side_brand [data-testid="stImage"] {
+    width: 100% !important;
+    max-width: none !important;
+}
+
+.st-key-side_brand [data-testid="stImage"] img {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    object-fit: contain !important;
+    margin: 0 auto !important;
+}
+
 .stApp [data-testid="stSidebar"] .stRadio label { padding:8px 10px;border-radius:12px; }
 .stApp [data-testid="stSidebar"] .stRadio label:hover { background:#ECFAFC; }
 .stApp [data-testid="stSidebar"] .stRadio label:has(input:checked) { background:linear-gradient(90deg,#D9F7F9,#E7F4FE);color:#008EA8;font-weight:700; }
@@ -523,14 +541,18 @@ def render_senior_board():
 
 
 # ── 기본 ◀ / ▶ 접기 버튼을 사용하는 사이드바 ──
-with st.sidebar:
-    with st.container(key='side_brand'):
-        logo_path = ROOT / "aivle.png"
-        if logo_path.is_file():
-            st.image(str(logo_path), width="stretch", alt="AIVLE SCHOOL 로고")
-        else:
-            # 배포 시 이미지가 누락되어도 앱 전체가 중단되지 않도록 텍스트 표시
-            st.markdown("<h2 style=\"text-align:center;color:#17BAC7;\">AIVLE</h2>", unsafe_allow_html=True)
+from pathlib import Path
+import streamlit as st
+
+ROOT = Path(__file__).parent
+
+with st.container(key="side_brand"):
+    logo_path = ROOT / "aivle.png"   # 파일명 반드시 aivle.png로 맞추기
+
+    if logo_path.exists():
+        st.image(str(logo_path), use_container_width=True)
+    else:
+        st.warning("로고 파일(aivle.png)을 찾을 수 없습니다.")
 
     uploaded_file = st.file_uploader(
         "PDF 업로드", type=["pdf"], key="learning_pdf_upload",
