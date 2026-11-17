@@ -540,13 +540,35 @@ def render_senior_board():
 
 
 # ── 기본 ◀ / ▶ 접기 버튼을 사용하는 사이드바 ──
-from pathlib import Path
-import streamlit as st
 
 ROOT = Path(__file__).parent
 
-with st.container(key="side_brand"):
-    logo_path = ROOT / "aivle.png"   # 파일명 반드시 aivle.png로 맞추기
+# 사이드바 시작
+with st.sidebar:
+
+    # AIVLE 로고
+    with st.container(key="side_brand"):
+        logo_path = ROOT / "aivle.png"
+
+        if logo_path.is_file():
+            st.image(
+                str(logo_path),
+                width="stretch",
+                alt="AIVLE SCHOOL 로고"
+            )
+        else:
+            st.warning("로고 파일(aivle.png)을 찾을 수 없습니다.")
+
+    # PDF 업로드
+    uploaded_file = st.file_uploader(
+        "PDF 업로드",
+        type=["pdf"],
+        key="learning_pdf_upload",
+        help="새 PDF는 한 번만 벡터화하고, 질문할 때에는 저장된 체인을 재사용합니다.",
+    )
+
+    # 이 아래부터 기존 PDF 처리 코드를 그대로 유지
+
 
     if logo_path.exists():
         st.image(str(logo_path), use_container_width=True)
