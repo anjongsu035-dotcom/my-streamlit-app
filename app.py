@@ -47,28 +47,27 @@ STYLE = r"""<style>
 .stApp [data-testid="stSidebarContent"] { padding:20px 14px 25px; }
 /* 기본 사이드바 접기 버튼은 유지: display:none 선언 금지 */
 
-/* AIVLE 사이드바 대형 로고 */
+/* AIVLE 사이드바 로고 */
 .st-key-side_brand {
     background: #FFFFFF !important;
     border: none !important;
-    border-radius: 0 !important;
     box-shadow: none !important;
-    padding: 8px 0 16px !important;
-    margin: 0 0 20px !important;
+    padding: 16px 4px !important;
+    margin-bottom: 20px !important;
+    width: 100%;
+    min-width: 0;
 }
-
 .st-key-side_brand [data-testid="stImage"] {
-    width: 100% !important;
-    max-width: none !important;
+    width: 100%;
+    max-width: 250px;
+    margin: 0 auto;
 }
-
-.st-key-side_brand [data-testid="stImage"] img {
-    display: block !important;
-    width: 100% !important;
-    max-width: none !important;
-    height: auto !important;
-    object-fit: contain !important;
-    margin: 0 auto !important;
+.st-key-side_brand img {
+    display: block;
+    width: 100%;
+    max-width: 250px !important;
+    height: auto;
+    object-fit: contain;
 }
 
 .stApp [data-testid="stSidebar"] .stRadio label { padding:8px 10px;border-radius:12px; }
