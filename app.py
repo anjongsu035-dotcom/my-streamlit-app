@@ -103,6 +103,30 @@ STYLE = r"""<style>
 .aivle-chat-text { max-width:100%;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;color:#1D4352;font-size:13px;line-height:1.72; }
 /* 긴 질문·줄바꿈 시 파란 박스 밖으로 텍스트가 나가지 않도록 고정 */
 .aivle-question-chip { box-sizing:border-box;display:block;width:100%;max-width:100%;min-width:0;margin:9px 0 10px;padding:13px 17px;border:1px solid #BEE9EF;border-radius:14px;background:linear-gradient(105deg,#E5FAFC,#EAF5FE);color:#204956;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;font-size:14px;line-height:1.7; }
+/* 백서 인사이트: 한국어 단어가 글자 단위로 끊기지 않도록 조정 */
+.st-key-answer_card,
+.st-key-answer_card [data-testid="stMarkdown"],
+.st-key-answer_card p,
+.st-key-answer_card li,
+.st-key-answer_card h1,
+.st-key-answer_card h2,
+.st-key-answer_card h3,
+.st-key-answer_card h4 {
+    word-break: keep-all !important;
+    overflow-wrap: break-word !important;
+    white-space: normal;
+    hyphens: none;
+}
+.st-key-answer_card p,
+.st-key-answer_card li {
+    font-size: 18px !important;
+    line-height: 1.85 !important;
+    letter-spacing: -0.015em;
+}
+.st-key-answer_card p + p {
+    margin-top: 0.9em;
+}
+
 /* 작은 화면에서 로고와 두 패널이 서로 침범하지 않도록 처리 */
 @media(max-width:760px) { .aivle-chat-bubble{max-width:93%;} .aivle-question-chip {font-size:13px;} }
 </style>"""
@@ -422,10 +446,14 @@ with st.sidebar:
         clear_chat()
         st.rerun()
 
-    st.caption("선배들에게 질문하기!")
-    st.button("🗓 학습 일정 (준비 중)", disabled=True, use_container_width=True)
-    st.button("📋 FAQ (준비 중)", disabled=True, use_container_width=True)
-    st.button("📊 학습 통계 (준비 중)", disabled=True, use_container_width=True)
+    st.markdown("**선배들에게 질문하기!**")
+    st.button(
+        "💬 질문 게시판 (준비 중)",
+        key="senior_question_board",
+        disabled=True,
+        use_container_width=True,
+    )
+    st.caption("후배가 질문을 올리고 선배가 댓글로 답하는 게시판을 추가할 예정입니다.")
     st.divider()
     with st.container(key='side_help'):
         st.markdown('**백서 검색 안내**')
