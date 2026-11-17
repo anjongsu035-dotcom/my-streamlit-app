@@ -553,8 +553,7 @@ with st.sidebar:
         if logo_path.is_file():
             st.image(
                 str(logo_path),
-                width="stretch",
-                alt="AIVLE SCHOOL 로고"
+                width="stretch"
             )
         else:
             st.warning("로고 파일(aivle.png)을 찾을 수 없습니다.")
