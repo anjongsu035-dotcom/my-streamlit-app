@@ -9,6 +9,8 @@ import html
 import logging
 import hashlib
 import tempfile
+import sqlite3
+from contextlib import closing
 import uuid
 import chromadb
 from io import BytesIO
@@ -47,7 +49,9 @@ STYLE = r"""<style>
 .stApp [data-testid="stSidebar"] { background:rgba(255,255,255,.97);border-right:1px solid var(--edge); }
 .stApp [data-testid="stSidebarContent"] { padding:20px 14px 25px; }
 /* 기본 사이드바 접기 버튼은 유지: display:none 선언 금지 */
-.st-key-side_brand { background:linear-gradient(125deg,#E8FAFC,#ECF8FF);border:1px solid #CAE9F0;border-radius:19px;padding:19px 13px 10px;margin-bottom:17px; }
+.st-key-side_brand { background:#FFFFFF;border:1px solid #E0EBEF;border-radius:19px;padding:22px 12px 20px;margin-bottom:17px;box-shadow:0 7px 21px rgba(20,106,135,.05);text-align:center; }
+.st-key-side_brand [data-testid="stImage"] { display:flex;justify-content:center; }
+.st-key-side_brand [data-testid="stImage"] img {max-width:100%;height:auto;}
 .st-key-side_brand h3 { font-size:21px;color:#0898AD;margin:0; }
 .st-key-side_brand p { color:#71949D;font-size:10px;letter-spacing:.1em; }
 .stApp [data-testid="stSidebar"] .stRadio label { padding:8px 10px;border-radius:12px; }
@@ -59,7 +63,7 @@ STYLE = r"""<style>
 .st-key-hero_panel [data-testid="stCaptionContainer"] p { color:#11AABD;font-size:11px;letter-spacing:.1em;font-weight:800; }
 .st-key-hero_panel h1 { font-weight:800;font-size:clamp(28px,2.55vw,40px);margin:6px 0 4px; }
 .st-key-hero_panel p { color:var(--sub);font-size:13px; }
-.st-key-chat_panel,.st-key-result_panel { background:rgba(255,255,255,.95);border:1px solid #DFEDF3;border-radius:24px;padding:22px 20px;box-shadow:var(--shadow);min-height:605px; }
+.st-key-chat_panel,.st-key-result_panel { background:rgba(255,255,255,.95);border:1px solid #DFEDF3;border-radius:24px;padding:22px 20px;box-shadow:var(--shadow);min-height:760px; }
 .st-key-chat_panel { background:radial-gradient(ellipse at 3% 100%,rgba(205,249,252,.58),transparent 45%),radial-gradient(ellipse at 100% 100%,rgba(205,232,255,.52),transparent 42%),#fff; }
 .st-key-chat_panel h4,.st-key-result_panel h4 { font-weight:800;font-size:17px;margin-bottom:0; }
 .st-key-chat_panel [data-testid="stCaptionContainer"],.st-key-result_panel [data-testid="stCaptionContainer"] { color:#899EAA;font-size:11px; }
@@ -73,7 +77,7 @@ STYLE = r"""<style>
 .st-key-chat_panel [data-testid="stChatInput"] textarea { font-size:13px; }
 .st-key-question_chip { border:1px solid #C8E9F2;background:linear-gradient(95deg,#E4FAFB,#E9F5FF);border-radius:13px;padding:13px 15px;overflow:hidden; }
 .st-key-question_chip p { margin:0;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.6;font-size:13px; }
-.st-key-answer_card { background:#FBFEFF;border:1px solid #E1EFF2;border-radius:19px;min-height:285px;padding:20px 21px;margin-top:8px;overflow-wrap:anywhere; }
+.st-key-answer_card { background:#FBFEFF;border:1px solid #E1EFF2;border-radius:19px;min-height:535px;padding:20px 21px;margin-top:8px;overflow-wrap:anywhere; }
 .st-key-answer_card p,.st-key-answer_card li { line-height:1.9;font-size:17px !important; }
 .st-key-empty_result { background:linear-gradient(145deg,#EDFCFE,#F2F8FF);border:1px dashed #BFE7F0;border-radius:18px;padding:25px 21px;min-height:380px; }
 .st-key-empty_result p { font-size:13px;color:var(--sub); }
@@ -83,7 +87,7 @@ STYLE = r"""<style>
 .stApp button[kind="primary"] { background:linear-gradient(95deg,#10AEC0,#6CCFE8);border:none;color:white; }
 .stApp button:hover { border-color:#57C5D5; }
 @media(max-width:1366px) { .stApp [data-testid="stMainBlockContainer"] {padding:21px 20px 40px;} .st-key-chat_panel,.st-key-result_panel {padding:18px 15px;border-radius:19px;} }
-@media(max-width:950px) { .stApp [data-testid="stMainBlockContainer"] {padding:16px 14px 32px;} .st-key-chat_panel,.st-key-result_panel {min-height:unset;} }
+@media(max-width:950px) { .stApp [data-testid="stMainBlockContainer"] {padding:16px 14px 32px;} .st-key-chat_panel,.st-key-result_panel {min-height:unset;} .st-key-answer_card {min-height:390px;} }
 @media(max-width:640px) { .st-key-hero_panel h1{font-size:28px;} .st-key-answer_card{padding:14px 12px;} .st-key-chat_history [class*="st-key-user_bubble_"],.st-key-chat_history [class*="st-key-assistant_bubble_"]{max-width:95%;} }
 
 
@@ -129,6 +133,11 @@ STYLE = r"""<style>
 
 /* 작은 화면에서 로고와 두 패널이 서로 침범하지 않도록 처리 */
 @media(max-width:760px) { .aivle-chat-bubble{max-width:93%;} .aivle-question-chip {font-size:13px;} }
+/* 선배 질문 게시판: Streamlit 기본 컨트롤로 구성 */
+.st-key-senior_board_page {background:rgba(255,255,255,.96);padding:24px;border-radius:24px;border:1px solid #D9EDF2;box-shadow:var(--shadow);}
+.st-key-senior_board_page [data-testid="stExpander"] {border:1px solid #DFEBF0;border-radius:15px;background:#FCFEFF;}
+.st-key-senior_board_page [data-testid="stMarkdown"] p {overflow-wrap:break-word;word-break:keep-all;line-height:1.8;}
+@media(max-width:950px) {.st-key-senior_board_page {padding:15px;}}
 </style>"""
 st.html(STYLE)
 
@@ -300,6 +309,7 @@ def make_short_llm_answer(full_answer, api_key):
 
 for name, default in {
     "messages": [],
+    "app_view": "chat",
     "last_answer": None,
     "pending_question": None,
     "uploaded_hash": None,
@@ -389,11 +399,134 @@ def queue_example(question):
     st.session_state.pending_question = question
 
 
+# ── 선배 질문 게시판 (시범 기능) ──
+# 코랩에서 생성한 기본 Chroma나 기존 RAG 체인에는 손대지 않습니다.
+# SQLite는 Streamlit 서버 로컬 저장소에 있으므로 배포/재시작 시 데이터가 사라질 수 있습니다.
+BOARD_DB_PATH = Path(tempfile.gettempdir()) / "aivle_senior_board.sqlite3"
+
+
+def board_connect():
+    conn = sqlite3.connect(str(BOARD_DB_PATH), timeout=15)
+    conn.execute("PRAGMA busy_timeout=15000")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS questions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            author TEXT NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS replies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            question_id INTEGER NOT NULL,
+            author TEXT NOT NULL,
+            body TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+            FOREIGN KEY(question_id) REFERENCES questions(id)
+        )
+    """)
+    conn.commit()
+    return conn
+
+
+def board_questions():
+    with closing(board_connect()) as conn:
+        questions = conn.execute(
+            "SELECT id, author, title, body, created_at FROM questions ORDER BY id DESC"
+        ).fetchall()
+        replies = conn.execute(
+            "SELECT question_id, author, body, created_at FROM replies ORDER BY id ASC"
+        ).fetchall()
+    by_question = {}
+    for question_id, author, body, created_at in replies:
+        by_question.setdefault(question_id, []).append((author, body, created_at))
+    return questions, by_question
+
+
+def board_add_question(author, title, body):
+    with closing(board_connect()) as conn:
+        conn.execute(
+            "INSERT INTO questions (author, title, body) VALUES (?, ?, ?)",
+            (author, title, body),
+        )
+        conn.commit()
+
+
+def board_add_reply(question_id, author, body):
+    with closing(board_connect()) as conn:
+        conn.execute(
+            "INSERT INTO replies (question_id, author, body) VALUES (?, ?, ?)",
+            (question_id, author, body),
+        )
+        conn.commit()
+
+
+def render_senior_board():
+    with st.container(key="senior_board_page"):
+        st.markdown("## 💬 선배들에게 질문하기!")
+        st.write("후배가 질문을 남기면 선배가 댓글로 답하는 게시판입니다.")
+        st.caption("시범 기능 · 현재 로그인/선배 인증 기능이 없으며, 서버 재시작·재배포 시 게시글이 사라질 수 있습니다.")
+        if st.button("← AI 학습 도우미로 돌아가기", key="back_to_chat"):
+            st.session_state.app_view = "chat"
+            st.rerun()
+
+        with st.expander("✍️ 후배 질문 등록", expanded=True):
+            with st.form("create_question", clear_on_submit=True):
+                junior = st.text_input("후배 이름 또는 닉네임", max_chars=30, placeholder="예: 10기 교육생")
+                title = st.text_input("질문 제목", max_chars=120, placeholder="예: DX 프로젝트는 어떻게 준비하셨나요?")
+                body = st.text_area("질문 내용", max_chars=4000, height=130)
+                submitted = st.form_submit_button("질문 등록", use_container_width=True)
+            if submitted:
+                if not title.strip() or not body.strip():
+                    st.warning("제목과 질문 내용을 모두 입력해 주세요.")
+                else:
+                    try:
+                        board_add_question(junior.strip() or "익명 후배", title.strip(), body.strip())
+                        st.rerun()
+                    except sqlite3.Error:
+                        logger.exception("[BOARD ERROR] 질문 저장 실패")
+                        st.error("질문 저장에 실패했습니다.")
+
+        st.markdown("### 질문 목록")
+        try:
+            questions, reply_map = board_questions()
+        except sqlite3.Error:
+            logger.exception("[BOARD ERROR] 게시판 조회 실패")
+            st.error("게시판을 불러오지 못했습니다.")
+            return
+        if not questions:
+            st.info("아직 질문이 없습니다. 첫 질문을 등록해 보세요.")
+        for qid, author, title, body, created in questions:
+            with st.expander(f"Q{qid}. {title} · 댓글 {len(reply_map.get(qid, []))}개", expanded=False):
+                st.caption(f"후배 · {author} · {created}")
+                st.write(body)  # 사용자 입력을 HTML로 주입하지 않음
+                st.divider()
+                for reply_author, reply_body, reply_created in reply_map.get(qid, []):
+                    st.caption(f"💬 선배 답글 · {reply_author} · {reply_created}")
+                    st.write(reply_body)
+                    st.divider()
+                with st.form(f"senior_reply_{qid}", clear_on_submit=True):
+                    senior = st.text_input("선배 이름 또는 닉네임", key=f"senior_{qid}", max_chars=30)
+                    reply = st.text_area("선배 댓글", key=f"reply_{qid}", max_chars=4000, height=95)
+                    reply_submitted = st.form_submit_button("댓글 등록")
+                if reply_submitted:
+                    if not reply.strip():
+                        st.warning("댓글 내용을 입력해 주세요.")
+                    else:
+                        try:
+                            board_add_reply(qid, senior.strip() or "익명 선배", reply.strip())
+                            st.rerun()
+                        except sqlite3.Error:
+                            logger.exception("[BOARD ERROR] 댓글 등록 실패")
+                            st.error("댓글 저장에 실패했습니다.")
+
+
 # ── 기본 ◀ / ▶ 접기 버튼을 사용하는 사이드바 ──
 with st.sidebar:
     with st.container(key='side_brand'):
-        st.image(BytesIO(AIVLE_LOGO_PNG), width=154)
-        st.caption('KT AIVLE SCHOOL · DX LEARNING')
+        st.image(BytesIO(AIVLE_LOGO_PNG), width=214)
 
     uploaded_file = st.file_uploader(
         "PDF 업로드", type=["pdf"], key="learning_pdf_upload",
@@ -447,13 +580,9 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("**선배들에게 질문하기!**")
-    st.button(
-        "💬 질문 게시판 (준비 중)",
-        key="senior_question_board",
-        disabled=True,
-        use_container_width=True,
-    )
-    st.caption("후배가 질문을 올리고 선배가 댓글로 답하는 게시판을 추가할 예정입니다.")
+    if st.button("💬 질문 게시판 열기", key="senior_question_board", use_container_width=True):
+        st.session_state.app_view = "senior_board"
+    st.caption("후배가 질문을 등록하면 선배가 댓글을 남길 수 있습니다.")
     st.divider()
     with st.container(key='side_help'):
         st.markdown('**백서 검색 안내**')
@@ -466,6 +595,11 @@ with st.sidebar:
             st.caption('⚠️ 기본 Chroma 인덱스가 없습니다')
         else:
             st.caption('⚠️ API 키 설정 필요')
+
+# 게시판을 열면 RAG와 기본 채팅 기능은 유지한 채 메인 화면만 전환합니다.
+if st.session_state.app_view == "senior_board":
+    render_senior_board()
+    st.stop()
 
 # 예시 질문 버튼 클릭 시 실제 RAG 실행
 if st.session_state.pending_question:
